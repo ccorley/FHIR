@@ -82,12 +82,12 @@ public class FHIRNotificationNATSPublisher implements FHIRNotificationSubscriber
 
             if (Boolean.parseBoolean(tlsProps.getProperty("useTLS"))) {
                 // Make sure that the tls properties are set.
-                if (tlsProps.getProperty("truststore") == null || tlsProps.getProperty("truststore-pw") == null || 
-                    tlsProps.getProperty("keystore") == null || tlsProps.getProperty("keystore-pw") == null) {
+                if (tlsProps.getProperty("truststore") == null || tlsProps.getProperty("truststorePass") == null || 
+                    tlsProps.getProperty("keystore") == null || tlsProps.getProperty("keystorePass") == null) {
                     throw new IllegalStateException("TLS config property missing from the NATS connection properties.");
                 }
 
-                ctx = SSLUtils.createSSLContext(tlsProps);
+                ctx = createSSLContext(tlsProps);
             }
 
             // Create the NATS client connection options
@@ -185,44 +185,37 @@ public class FHIRNotificationNATSPublisher implements FHIRNotificationSubscriber
     private String buildNotificationErrorMessage(String channelName, String notificationEvent) {
         return String.format("NATS publication failure; channel '%s'\nNotification event: '%s'\n.", channelName, notificationEvent);
     }
-}
-
-/* 
-* Modified from original NATS documentation @ https://docs.nats.io/developing-with-nats/security/tls
-*
-* This example requires certificates to be in the java keystore format (.jks).
-* To do so openssl is used to generate a pkcs12 file (.p12) from client-cert.pem and client-key.pem.
-* The resulting file is then imported int a java keystore named keystore.jks using keytool which is part of java jdk.
-* keytool is also used to import the CA certificate rootCA.pem into truststore.jks.  
-*/
-class SSLUtils extends FHIRNotificationNATSPublisher {
-
-    static KeyStore loadKeystore(String path, String password) throws Exception {
+    /*
+     * Modified from original NATS documentation @ https://docs.nats.io/developing-with-nats/security/tls
+     * openssl is used to generate a pkcs12 file (.p12) from client-cert.pem and client-key.pem.
+     * The resulting file is then imported into a java keystore using keytool which is part of java jdk.
+     * keytool is also used to import the CA certificate rootCA.pem into the truststore.
+     */
+    private static KeyStore loadKeystore(String path, String password) throws Exception {
         KeyStore store = KeyStore.getInstance("PKCS12");
-
-        try(BufferedInputStream in = new BufferedInputStream(new FileInputStream(path));) {
+        try (BufferedInputStream in = new BufferedInputStream(new FileInputStream(path));) {
             store.load(in, password.toCharArray());
         }
         return store;
     }
 
-    static KeyManager[] createTestKeyManagers(Properties tlsProps) throws Exception {
-        KeyStore store = loadKeystore(tlsProps.getProperty("keystore"), tlsProps.getProperty("keystore-pw"));
+    private static KeyManager[] createKeyManagers(Properties tlsProps) throws Exception {
+        KeyStore store = loadKeystore(tlsProps.getProperty("keystore"), tlsProps.getProperty("keystorePass"));
         KeyManagerFactory factory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-        factory.init(store, tlsProps.getProperty("keystore-pw").toCharArray());
+        factory.init(store, tlsProps.getProperty("keystorePass").toCharArray());
         return factory.getKeyManagers();
     }
 
-    static TrustManager[] createTestTrustManagers(Properties tlsProps) throws Exception {
-        KeyStore store = loadKeystore(tlsProps.getProperty("truststore"), tlsProps.getProperty("truststore-pw"));
+    private static TrustManager[] createTrustManagers(Properties tlsProps) throws Exception {
+        KeyStore store = loadKeystore(tlsProps.getProperty("truststore"), tlsProps.getProperty("truststorePass"));
         TrustManagerFactory factory = TrustManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
         factory.init(store);
         return factory.getTrustManagers();
     }
 
-    static SSLContext createSSLContext(Properties tlsProps) throws Exception {
+    private static SSLContext createSSLContext(Properties tlsProps) throws Exception {
         SSLContext ctx = SSLContext.getInstance("TLSv1.2");
-        ctx.init(createTestKeyManagers(tlsProps), createTestTrustManagers(tlsProps), new SecureRandom());
+        ctx.init(createKeyManagers(tlsProps), createTrustManagers(tlsProps), new SecureRandom());
         return ctx;
     }
 }
